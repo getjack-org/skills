@@ -1,0 +1,181 @@
+name: Validate Skills
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate plugin.json syntax
+        run: |
+          echo "Checking plugin.json..."
+          if ! jq . .claude-plugin/plugin.json > /dev/null 2>&1; then
+            echo "ERROR: Invalid JSON in plugin.json"
+            exit 1
+          fi
+          echo "✓ plugin.json is valid JSON"
+
+      - name: Check required plugin.json fields
+        run: |
+          for field in name version description author; do
+            if ! jq -e ".$field" .claude-plugin/plugin.json > /dev/null 2>&1; then
+              echo "ERROR: Missing required field '$field' in plugin.json"
+              exit 1
+            fi
+          done
+          echo "✓ All required fields present in plugin.json"
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          for skill_md in skills/*/SKILL.md; do
+            echo "Checking: $skill_md"
+
+            # Check frontmatter exists (starts with ---)
+            if ! head -1 "$skill_md" | grep -q "^---"; then
+              echo "ERROR: Missing frontmatter in $skill_md"
+              exit 1
+            fi
+
+            # Check frontmatter is closed
+            if ! head -20 "$skill_md" | tail -n +2 | grep -q "^---"; then
+              echo "ERROR: Frontmatter not closed in $skill_md"
+              exit 1
+            fi
+
+            # Check required fields
+            if ! grep -q "^name:" "$skill_md"; then
+              echo "ERROR: Missing 'name' in frontmatter of $skill_md"
+              exit 1
+            fi
+
+            if ! grep -q "^description:" "$skill_md"; then
+              echo "ERROR: Missing 'description' in frontmatter of $skill_md"
+              exit 1
+            fi
+
+            echo "  ✓ Valid frontmatter"
+          done
+
+      - name: Check SKILL.md line count
+        run: |
+          max_lines=300
+          for skill_md in skills/*/SKILL.md; do
+            lines=$(wc -l < "$skill_md")
+            if [ "$lines" -gt "$max_lines" ]; then
+              echo "ERROR: $skill_md has $lines lines (max $max_lines)"
+              echo "Move details to reference/ files for progressive disclosure"
+              exit 1
+            fi
+            echo "✓ $skill_md: $lines lines (under $max_lines limit)"
+          done
+
+      - name: Check reference files if referenced
+        run: |
+          for skill_dir in skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            skill_md="${skill_dir}SKILL.md"
+
+            # Check if SKILL.md references reference/
+            if grep -q "reference/" "$skill_md" 2>/dev/null; then
+              if [ ! -d "${skill_dir}reference" ]; then
+                echo "ERROR: $skill_name references reference/ but directory is missing"
+                exit 1
+              fi
+
+              # Count reference files
+              ref_count=$(find "${skill_dir}reference" -name "*.md" 2>/dev/null | wc -l)
+              echo "✓ $skill_name: reference/ directory exists with $ref_count file(s)"
+            fi
+          done
+
+      - name: Check scripts if referenced
+        run: |
+          for skill_dir in skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            skill_md="${skill_dir}SKILL.md"
+
+            # Check if SKILL.md references scripts/
+            if grep -q "scripts/" "$skill_md" 2>/dev/null; then
+              if [ ! -d "${skill_dir}scripts" ]; then
+                echo "ERROR: $skill_name references scripts/ but directory is missing"
+                exit 1
+              fi
+
+              # Check scripts are executable
+              for script in "${skill_dir}scripts/"*; do
+                if [ -f "$script" ] && [[ "$script" == *.sh ]]; then
+                  if [ ! -x "$script" ]; then
+                    echo "ERROR: $script is not executable (run chmod +x)"
+                    exit 1
+                  fi
+                fi
+              done
+
+              echo "✓ $skill_name: scripts/ directory exists and scripts are executable"
+            fi
+          done
+
+      - name: Check required markdown files
+        run: |
+          for md_file in README.md CONTRIBUTING.md SPIRIT.md; do
+            if [ ! -s "$md_file" ]; then
+              echo "ERROR: Missing or empty: $md_file"
+              exit 1
+            fi
+            echo "✓ $md_file exists"
+          done
+
+      - name: Check LICENSE exists
+        run: |
+          if [ ! -f "LICENSE" ]; then
+            echo "ERROR: Missing LICENSE file"
+            exit 1
+          fi
+          echo "✓ LICENSE exists"
+
+      - name: Verify skill directory structure
+        run: |
+          for skill_dir in skills/*/; do
+            skill_name=$(basename "$skill_dir")
+
+            # Must have SKILL.md
+            if [ ! -f "${skill_dir}SKILL.md" ]; then
+              echo "ERROR: $skill_name missing SKILL.md"
+              exit 1
+            fi
+
+            echo "✓ $skill_name has valid structure"
+          done
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "=== Validation Summary ==="
+          echo "Skills found:"
+          for skill_dir in skills/*/; do
+            skill_name=$(basename "$skill_dir")
+            lines=$(wc -l < "${skill_dir}SKILL.md")
+            ref_count=0
+            script_count=0
+
+            if [ -d "${skill_dir}reference" ]; then
+              ref_count=$(find "${skill_dir}reference" -name "*.md" 2>/dev/null | wc -l)
+            fi
+
+            if [ -d "${skill_dir}scripts" ]; then
+              script_count=$(find "${skill_dir}scripts" -type f 2>/dev/null | wc -l)
+            fi
+
+            echo "  - $skill_name"
+            echo "    SKILL.md: $lines lines"
+            echo "    Reference files: $ref_count"
+            echo "    Scripts: $script_count"
+          done
+          echo ""
+          echo "All validations passed!"
