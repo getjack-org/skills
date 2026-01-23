@@ -4,195 +4,298 @@ description: >
   Add Stripe subscription payments to any Jack project.
   Use when: user wants payments, subscriptions, billing, or checkout.
   Stack-agnostic: works with any framework (Hono, Next.js, Express) and auth library.
-disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, WebFetch
 ---
 
-# Add Payments to Jack Project
+# Add Stripe Payments to Jack Project
 
-This skill teaches **what you need** for Stripe payments on Jack Cloud. You figure out **how to implement it** for the project's specific stack.
+You are guiding a user through adding Stripe subscription payments. This is a hands-on guided workflow, not a reference doc.
 
-## What This Skill Provides
+## Your Role
 
-- Required secrets and their formats
-- Webhook events to handle
-- Data model for subscriptions
-- Jack Cloud deployment patterns
-- Verification scripts
+- Ask questions to understand their needs
+- Explain what you're doing and why
+- Execute actions confidently (don't ask permission for standard steps)
+- Guide them through the two-deploy process
 
-## What You Figure Out
+---
 
-- Route implementation (Hono, Express, Next.js, etc.)
-- Auth integration (Better Auth, NextAuth, Lucia, custom)
-- Database integration (D1 directly, Drizzle, Prisma, Kysely)
-- Frontend components
+## Phase 1: Gather Requirements
 
-## Prerequisites
+**Before writing any code, ask the user:**
 
-```bash
-# Must have Jack project
-ls .jack.json wrangler.jsonc 2>/dev/null
-```
+1. "What type of payments do you need?"
+   - **One-time payment** - Customer pays once (e.g., buy a product, lifetime access)
+   - **Single subscription** - One recurring plan (e.g., "Premium at $10/month")
+   - **Multiple tiers** - Different plans (e.g., "Pro at $19/month, Enterprise at $99/month")
 
-## Required Secrets
+2. "Do you have a Stripe account with API keys ready? I'll need your secret key (starts with `sk_test_` or `sk_live_`). Test keys are recommended for initial setup."
 
-These secrets must exist in `.secrets.json` before deployment:
+3. "Do you already have products/prices in Stripe, or should I create them?"
 
-| Secret | Format | Required | Source |
-|--------|--------|----------|--------|
-| `STRIPE_SECRET_KEY` | `sk_test_...` or `sk_live_...` | Yes | [API Keys](https://dashboard.stripe.com/apikeys) |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_...` | Yes (after first deploy) | Webhook endpoint signing secret |
-| `STRIPE_PRO_PRICE_ID` | `price_...` | If using plans | Product price ID |
-| `STRIPE_ENTERPRISE_PRICE_ID` | `price_...` | If using plans | Product price ID |
+**Wait for their answers before proceeding.**
 
-**Verify secrets exist:**
-```bash
-./scripts/check-secrets.sh
-```
+### Adapt Based on Payment Type
 
-**Create Stripe products programmatically:**
-```bash
-./scripts/setup-stripe-products.sh
-```
+**One-time payments:**
+- Simpler schema (no subscription table, just payment records)
+- Checkout mode: `payment` instead of `subscription`
+- No webhook handlers for subscription events
+- Endpoint: `/api/checkout/create` returns one-time checkout URL
 
-## Required Webhook Events
+**Single subscription:**
+- One price ID in secrets (`STRIPE_PRICE_ID`)
+- Simpler code (no plan comparison logic)
+- Standard subscription webhooks
 
-Configure these events in Stripe Dashboard → Webhooks:
+**Multiple tiers:**
+- Multiple price IDs (`STRIPE_PRO_PRICE_ID`, `STRIPE_ENTERPRISE_PRICE_ID`, etc.)
+- Plan comparison logic in subscription status
+- Full subscription webhooks
 
-| Event | When Fired | What to Do |
-|-------|------------|------------|
-| `checkout.session.completed` | User completes checkout | Create/activate subscription |
-| `customer.subscription.created` | Subscription starts | Store subscription record |
-| `customer.subscription.updated` | Plan change, renewal, cancellation scheduled | Update subscription record |
-| `customer.subscription.deleted` | Subscription ends | Mark subscription inactive |
-| `invoice.paid` | Payment succeeds | Update payment status |
-| `invoice.payment_failed` | Payment fails | Notify user, update status |
+---
 
-## Webhook Endpoint Requirements
+## Phase 2: Analyze Their Stack
 
-Create an endpoint that:
+Read the project to understand:
+- Framework (Hono, Next.js, Express, etc.)
+- Auth system (Better Auth, custom, none)
+- Database (D1, Drizzle, Prisma, none)
 
-1. **Receives POST** at a consistent path (e.g., `/api/webhooks/stripe`)
-2. **Verifies signature** using `STRIPE_WEBHOOK_SECRET`
-3. **Reads raw body** (not parsed JSON) for signature verification
-4. **Handles events** listed above
-5. **Returns 200** quickly (do heavy work async if needed)
+Choose the appropriate reference:
+- Hono + Better Auth → `reference/hono-better-auth.md`
+- Hono + custom/no auth → `reference/hono-custom.md`
+- Next.js → `reference/nextjs.md`
 
-**Cloudflare Workers note:** Use `stripe.webhooks.constructEventAsync()` (async version).
+---
 
-## Data Model
+## Phase 3: Implementation
 
-Store this subscription data (adapt to your ORM/database):
+Tell the user what you're creating:
 
-```
-subscription:
-  id: string (primary key)
-  user_id: string (foreign key to user)
-  stripe_customer_id: string
-  stripe_subscription_id: string
-  stripe_price_id: string
-  plan: string ("pro", "enterprise", etc.)
-  status: string ("active", "trialing", "past_due", "canceled")
-  cancel_at_period_end: boolean
-  current_period_end: timestamp
-  created_at: timestamp
-  updated_at: timestamp
-```
+"I'll set up:
+1. **Webhook handler** - receives payment events from Stripe
+2. **Checkout endpoints** - creates payment sessions
+3. **Subscription endpoints** - checks subscription status
+4. **Database schema** - stores subscription data
 
-**User table addition:**
-```
-user:
-  ... existing fields ...
-  stripe_customer_id: string (nullable)
-```
+Let me get started."
 
-See [reference/d1-schema.sql](reference/d1-schema.sql) for raw SQL if using D1 directly.
+### Required Files
 
-## Checkout Flow
+Create these (adapt to their stack):
 
-Implement this flow:
+1. **Webhook handler** at `/api/webhooks/stripe`
+   - Verifies Stripe signatures
+   - Handles: `checkout.session.completed`, `customer.subscription.*`, `invoice.*`
+   - Uses async signature verification (required for Jack Cloud)
 
-1. **User clicks upgrade** → Frontend calls your backend
-2. **Backend creates Checkout Session** → Returns Stripe URL
-3. **Redirect user to Stripe** → User completes payment
-4. **Stripe sends webhook** → `checkout.session.completed`
-5. **Backend creates subscription** → User is now subscribed
+2. **Checkout endpoint** at `/api/checkout/create`
+   - Creates Stripe Checkout Session
+   - Returns redirect URL
 
-```
-Frontend          Backend              Stripe
-   │                 │                   │
-   │─── upgrade ────►│                   │
-   │                 │── create session ─►│
-   │                 │◄── session URL ───│
-   │◄── redirect ────│                   │
-   │─────────────────────── payment ────►│
-   │                 │◄─── webhook ──────│
-   │                 │   (create sub)    │
-   │◄── show success │                   │
-```
+3. **Subscription endpoint** at `/api/subscription/status`
+   - Returns current subscription state
 
-## Setup Flow
+4. **Database schema** with tables:
+   - `user` (add `stripe_customer_id` column)
+   - `subscription` (subscription data)
+   - `stripe_webhook_event` (idempotency)
 
-1. **Add Stripe secret** to `.secrets.json`
-2. **Create products** (run `./scripts/setup-stripe-products.sh` or via Dashboard)
-3. **Implement webhook endpoint** in your framework
-4. **Implement checkout flow** (session creation + redirect)
-5. **Add subscription state** to your database
-6. **Deploy** with `jack ship`
-7. **Configure webhook** in Stripe Dashboard with deployed URL
-8. **Add webhook secret** to `.secrets.json`
-9. **Redeploy** with `jack ship`
-10. **Verify** with `./scripts/verify-setup.sh`
+5. **Secrets template** `.secrets.json.example`
 
-## Verification
+### Secrets Required
+
+| Secret | Format | When Needed |
+|--------|--------|-------------|
+| `STRIPE_SECRET_KEY` | `sk_test_...` or `sk_live_...` | Always |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_...` | After first deploy |
+| `STRIPE_PRICE_ID` | `price_...` | Single plan/product |
+| `STRIPE_PRO_PRICE_ID` | `price_...` | Multiple tiers only |
+| `STRIPE_ENTERPRISE_PRICE_ID` | `price_...` | Multiple tiers only |
+
+Adapt secret names based on what the user needs. For a single subscription, just use `STRIPE_PRICE_ID`. For multiple tiers, use descriptive names like `STRIPE_PRO_PRICE_ID`.
+
+---
+
+## Phase 4: First Deploy
+
+**Explain to the user:**
+
+"Now I'll deploy the app. Here's what happens next:
+
+1. **First deploy** - Gets us a live URL
+2. **Create Stripe webhook** - Points to that URL
+3. **Second deploy** - Adds the webhook secret
+
+This two-step process is required because Stripe needs your live URL to create the webhook, and we need the webhook secret for signature verification."
+
+**Then deploy:**
 
 ```bash
-# Check all secrets are configured
-./scripts/check-secrets.sh
-
-# After deployment, verify webhook works
-./scripts/verify-setup.sh
+jack ship
 ```
 
-**Manual verification:**
-- [ ] Secrets configured (check with script)
-- [ ] Webhook endpoint returns 200 for POST
-- [ ] Test checkout with card `4242 4242 4242 4242`
-- [ ] Webhook logs show successful delivery in Stripe Dashboard
-- [ ] Subscription record created in database
+After deploy, note the URL (e.g., `https://username-project.runjack.xyz`).
 
-## Stack-Specific Examples
+---
 
-After understanding the requirements above, see examples for common stacks:
+## Phase 5: Stripe Webhook Setup
 
-- [reference/hono-better-auth.md](reference/hono-better-auth.md) — Hono + Better Auth (common Jack stack)
-- [reference/hono-custom.md](reference/hono-custom.md) — Hono with custom auth
-- [reference/nextjs.md](reference/nextjs.md) — Next.js API routes
+**Tell the user:**
 
-These are **examples**, not copy-paste solutions. Adapt to your project's patterns.
+"Your app is live. Now I'll create the Stripe webhook pointing to your URL."
 
-## Stripe Documentation
+### If user wants you to create it (API):
 
-For up-to-date API reference, fetch: `https://docs.stripe.com/llms.txt`
+**For one-time payments:**
+```bash
+curl -X POST https://api.stripe.com/v1/webhook_endpoints \
+  -u "STRIPE_SECRET_KEY:" \
+  -d "url=https://YOUR_URL/api/webhooks/stripe" \
+  -d "enabled_events[]=checkout.session.completed"
+```
 
-Quick links:
-- [Checkout Sessions](https://docs.stripe.com/api/checkout/sessions)
-- [Webhook Events](https://docs.stripe.com/webhooks/webhook-events)
-- [Webhook Signatures](https://docs.stripe.com/webhooks/signatures)
-- [Test Cards](https://docs.stripe.com/testing)
+**For subscriptions:**
+```bash
+curl -X POST https://api.stripe.com/v1/webhook_endpoints \
+  -u "STRIPE_SECRET_KEY:" \
+  -d "url=https://YOUR_URL/api/webhooks/stripe" \
+  -d "enabled_events[]=checkout.session.completed" \
+  -d "enabled_events[]=customer.subscription.created" \
+  -d "enabled_events[]=customer.subscription.updated" \
+  -d "enabled_events[]=customer.subscription.deleted" \
+  -d "enabled_events[]=invoice.paid" \
+  -d "enabled_events[]=invoice.payment_failed"
+```
+
+Extract the `secret` from the response - it starts with `whsec_`.
+
+### If user prefers Dashboard:
+
+Guide them:
+1. Go to https://dashboard.stripe.com/webhooks
+2. Click "Add endpoint"
+3. Enter URL: `https://YOUR_URL/api/webhooks/stripe`
+4. Select events (list them)
+5. Copy the signing secret
+
+---
+
+## Phase 6: Create Stripe Products (if needed)
+
+If user doesn't have products, create them based on what they need:
+
+### One-time payment (single product)
+
+Ask: "What's the product name and price?"
+
+```bash
+curl -X POST https://api.stripe.com/v1/products \
+  -u "STRIPE_SECRET_KEY:" \
+  -d "name=YOUR_PRODUCT_NAME"
+
+curl -X POST https://api.stripe.com/v1/prices \
+  -u "STRIPE_SECRET_KEY:" \
+  -d "product=PRODUCT_ID" \
+  -d "unit_amount=PRICE_IN_CENTS" \
+  -d "currency=usd"
+```
+
+### Single subscription
+
+Ask: "What's your plan name and monthly price?"
+
+```bash
+curl -X POST https://api.stripe.com/v1/products \
+  -u "STRIPE_SECRET_KEY:" \
+  -d "name=YOUR_PLAN_NAME"
+
+curl -X POST https://api.stripe.com/v1/prices \
+  -u "STRIPE_SECRET_KEY:" \
+  -d "product=PRODUCT_ID" \
+  -d "unit_amount=PRICE_IN_CENTS" \
+  -d "currency=usd" \
+  -d "recurring[interval]=month"
+```
+
+### Multiple tiers
+
+Ask: "What plans do you want? (e.g., 'Pro at $19/month, Enterprise at $99/month')"
+
+Create each plan with the user's specified names and prices.
+
+Note the price ID(s) for `.secrets.json`.
+
+---
+
+## Phase 7: Second Deploy
+
+Update `.secrets.json` with:
+- `STRIPE_WEBHOOK_SECRET` (from webhook creation)
+- Price IDs (if created)
+
+```bash
+jack ship
+```
+
+---
+
+## Phase 8: Verification
+
+**Tell the user:**
+
+"Everything is deployed. Let's verify it works."
+
+### Test the flow:
+
+1. Check subscription status (should be free/none):
+```bash
+curl "https://YOUR_URL/api/subscription/status?email=test@example.com"
+```
+
+2. Create a checkout session:
+```bash
+curl -X POST "https://YOUR_URL/api/checkout/create" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}'
+```
+
+3. **Ask user to complete checkout** with test card `4242 4242 4242 4242`
+
+4. After checkout, verify subscription is active:
+```bash
+curl "https://YOUR_URL/api/subscription/status?email=test@example.com"
+```
+
+If `subscribed: true`, you're done!
+
+---
 
 ## Troubleshooting
 
-### Webhook signature verification fails
-- Ensure using raw request body (not parsed JSON)
-- Verify `STRIPE_WEBHOOK_SECRET` matches endpoint in Dashboard
-- Use async verification on Cloudflare Workers
+### Webhook returns 400
+- Check `STRIPE_WEBHOOK_SECRET` matches the endpoint
+- Ensure using raw body (not parsed JSON) for verification
 
-### Subscription not created after checkout
-- Check webhook logs in Stripe Dashboard
-- Verify `checkout.session.completed` event is selected
-- Check your webhook handler for errors
+### Subscription not created
+- Check Stripe Dashboard → Webhooks → Recent deliveries
+- Look for errors in webhook response
 
-### Customer not found
-- Ensure creating Stripe customer before checkout
-- Or use `customer_email` in checkout session to auto-create
+### Checkout fails
+- Verify `STRIPE_SECRET_KEY` is correct
+- Check price ID exists in Stripe
+
+---
+
+## Reference Examples
+
+Stack-specific code examples (adapt to project's patterns):
+- [reference/hono-better-auth.md](reference/hono-better-auth.md)
+- [reference/hono-custom.md](reference/hono-custom.md)
+- [reference/nextjs.md](reference/nextjs.md)
+
+---
+
+## Stripe Documentation
+
+For current API reference: `https://docs.stripe.com/llms.txt`
