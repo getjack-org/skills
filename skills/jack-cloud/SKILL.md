@@ -54,6 +54,12 @@ After editing code, push changes live:
 jack ship
 ```
 
+For machine-readable output (useful in scripts and agents):
+
+```bash
+jack ship --json
+```
+
 Builds the project and deploys to production. Takes a few seconds.
 
 **MCP:** `mcp__jack__deploy_project`
@@ -88,6 +94,12 @@ Adds a D1 database to your project. The binding is automatically configured in `
 
 ```bash
 jack db execute "SELECT * FROM users LIMIT 10"
+```
+
+For JSON output:
+
+```bash
+jack db execute --json "SELECT * FROM users LIMIT 10"
 ```
 
 ### Write Data
