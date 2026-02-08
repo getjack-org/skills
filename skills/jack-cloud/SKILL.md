@@ -4,7 +4,7 @@ description: >
   Deploy web services to the cloud with Jack.
   Use when: you need to create APIs, websites, or backends and deploy them live.
   Teaches: project creation, deployment, databases, logs, and all Jack Cloud services.
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+allowed-tools: Read, Edit, Grep, Glob
 ---
 
 # Jack Cloud — Deploy Anything from the Terminal

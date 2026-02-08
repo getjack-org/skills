@@ -4,7 +4,7 @@ description: >
   Essential Jack Cloud patterns for AI agents.
   Use when: working in any Jack project, querying databases, deploying, or managing services.
   Teaches: how to use Jack CLI effectively for common tasks.
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob
+allowed-tools: Read, Edit, Grep, Glob
 ---
 
 # Jack Basics
