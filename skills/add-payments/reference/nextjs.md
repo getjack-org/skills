@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(
+    // IMPORTANT: Use constructEventAsync for Cloudflare Workers deployment
+    // The sync version fails with "SubtleCryptoProvider cannot be used in a synchronous context"
+    event = await stripe.webhooks.constructEventAsync(
       body,
       signature,
       process.env.STRIPE_WEBHOOK_SECRET!
@@ -146,6 +148,11 @@ When deploying Next.js to Cloudflare Workers via Jack:
 1. Use `@cloudflare/next-on-pages` or similar adapter
 2. Secrets go in `.secrets.json` (Jack syncs them)
 3. D1 database via Cloudflare bindings
+4. **Use `constructEventAsync`** for webhook signature verification (required for Workers runtime)
+5. Stripe timestamps are Unix seconds - multiply by 1000 for JavaScript Date:
+   ```typescript
+   const periodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+   ```
 
 ## Webhook URL
 

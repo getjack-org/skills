@@ -1,13 +1,13 @@
 {
   "name": "jack-skills",
   "description": "Official skills for Jack projects - add payments, auth, and more",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "Jack Team",
-    "url": "https://github.com/getjack"
+    "url": "https://github.com/getjack-org"
   },
   "homepage": "https://docs.getjack.org/skills",
-  "repository": "https://github.com/getjack/skills",
+  "repository": "https://github.com/getjack-org/skills",
   "license": "MIT",
-  "keywords": ["jack", "cloudflare", "workers", "stripe", "auth", "payments", "saas"]
+  "keywords": ["jack", "cloudflare", "workers", "deployment", "mcp", "ai-agent", "webdev", "webapp", "serverless", "api", "backend"]
 }

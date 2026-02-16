@@ -4,6 +4,7 @@ description: >
   Deploy web services to the cloud with Jack.
   Use when: you need to create APIs, websites, or backends and deploy them live.
   Teaches: project creation, deployment, databases, logs, and all Jack Cloud services.
+metadata: {"clawdbot":{"emoji":"🃏","homepage":"https://github.com/getjack-org/skills","requires":{"bins":["node","npm"],"env":[]},"install":[{"id":"npm","kind":"npm","package":"@getjack/jack","bins":["jack"],"label":"Install Jack CLI (npm)"}]}}
 allowed-tools: Read, Edit, Grep, Glob
 ---
 
@@ -17,6 +18,22 @@ Jack deploys Cloudflare Workers projects in one command. Create an API, add a da
 npm i -g @getjack/jack
 jack login
 ```
+
+## External Endpoints
+
+| Endpoint | Data Sent | Purpose |
+|----------|-----------|---------|
+| `auth.getjack.org` | OAuth tokens (GitHub/Google via WorkOS) | Authentication |
+| `control.getjack.org` | Project metadata, source code during deploy | Project management and deployments |
+
+## Security & Privacy
+
+- `jack login` authenticates via browser OAuth (GitHub/Google via WorkOS). Auth token stored at `~/.config/jack/auth.json`
+- No environment variables required — authentication is interactive
+- Source code is uploaded during `jack ship` and deployed to Cloudflare Workers via Jack Cloud
+- Project metadata (name, slug, deploy history) is stored on Jack Cloud
+- No telemetry is sent without user consent (`jack telemetry` to configure)
+- **npm package:** [@getjack/jack](https://www.npmjs.com/package/@getjack/jack) — open source CLI
 
 ## MCP Tools
 
@@ -37,8 +54,12 @@ This creates a project from a template, deploys it, and prints the live URL.
 | Template | What you get |
 |----------|-------------|
 | `api` | Hono API with example routes |
+| `hello` | Minimal hello-world starter |
 | `miniapp` | Full-stack app with frontend |
-| `simple-api-starter` | Minimal API starting point |
+| `ai-chat` | AI chat app with streaming |
+| `nextjs` | Next.js full-stack app |
+
+Run `jack new` to see all available templates.
 
 **MCP:** `mcp__jack__create_project` with `name` and `template` params.
 
@@ -80,56 +101,19 @@ Shows: live URL, last deploy time, attached services (databases, storage, etc.).
 
 ## Database (D1)
 
-### Create a Database
-
 ```bash
-jack services db create
-```
-
-Adds a D1 database to your project. The binding is automatically configured in `wrangler.jsonc`.
-
-**MCP:** `mcp__jack__create_database`
-
-### Query Data
-
-```bash
-jack db execute "SELECT * FROM users LIMIT 10"
-```
-
-For JSON output:
-
-```bash
-jack db execute --json "SELECT * FROM users LIMIT 10"
-```
-
-### Write Data
-
-```bash
+jack services db create                  # Add D1 database (auto-configures wrangler.jsonc)
+jack db execute "SELECT * FROM users"    # Query data
+jack db execute --json "SELECT ..."      # JSON output
 jack db execute --write "INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')"
-```
-
-### Create Tables
-
-```bash
 jack db execute --write "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT, body TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)"
-```
-
-### View Schema
-
-```bash
-jack db execute "SELECT name FROM sqlite_master WHERE type='table'"
+jack db execute "SELECT name FROM sqlite_master WHERE type='table'"   # View schema
 jack db execute "PRAGMA table_info(users)"
 ```
 
-**MCP:** `mcp__jack__execute_sql` — set `allow_write: true` for writes. Destructive operations (DROP, TRUNCATE) are blocked by default.
+After schema changes, redeploy with `jack ship`.
 
-### Deploy After Schema Changes
-
-After creating tables or modifying schema, redeploy so your worker code can use them:
-
-```bash
-jack ship
-```
+**MCP:** `mcp__jack__create_database`, `mcp__jack__execute_sql` (set `allow_write: true` for writes; DROP/TRUNCATE blocked by default).
 
 ---
 

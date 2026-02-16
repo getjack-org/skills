@@ -294,8 +294,6 @@ Stack-specific code examples (adapt to project's patterns):
 - [reference/hono-custom.md](reference/hono-custom.md)
 - [reference/nextjs.md](reference/nextjs.md)
 
----
-
 ## Stripe Documentation
 
 For current API reference: `https://docs.stripe.com/llms.txt`
