@@ -4,6 +4,7 @@ description: >
   Deploy web services to the cloud with Jack.
   Use when: you need to create APIs, websites, or backends and deploy them live.
   Teaches: project creation, deployment, databases, logs, and all Jack Cloud services.
+homepage: https://getjack.org
 metadata: {"clawdbot":{"emoji":"🃏","homepage":"https://github.com/getjack-org/skills","requires":{"bins":["node","npm"],"env":[]},"install":[{"id":"npm","kind":"npm","package":"@getjack/jack","bins":["jack"],"label":"Install Jack CLI (npm)"}]}}
 allowed-tools: Read, Edit, Grep, Glob
 ---
